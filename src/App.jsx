@@ -120,6 +120,7 @@ function App() {
 
 
       setEvents(eventWithTeamsAndRacesAndResults);
+      setLoading(false);
     }
     fetchEvents();
 
@@ -260,131 +261,128 @@ function App() {
     return raceWinner;
   }
 
+
   // Generates schedule
   function generateSchedule() {
-    const races = [];
+    console.log("Entering loop");
+    let races = [];
+    let team_matches_played = selectedEvent.teams.reduce((obj, team) => {
+      obj[team.id] = 0;
+      return obj;
+    }, {});
+
+    let team_match_intervals = selectedEvent.teams.reduce((obj, team) => {
+      obj[team.id] = -1;
+      return obj;
+    }, {});
+
+    let rounds_played= 0;
+
     if (scheduleType === "round-robin") {
+
       // Applies round-robin scheduling algorithm to the event with eventId provided
-      let tempRaces = [];
-      let idIncrement = 0;
-      for (let i = 0; i < selectedEvent.teams.length; i++) {
-        for (let j = 0; j < selectedEvent.teams.length; j++) {
-          if (i !== j) {
-            tempRaces.push({
-              id: idIncrement.toString() + selectedEvent.teams[i].id.toString() + selectedEvent.teams[j].id.toString(),
-              racenumber: 1,
-              team1_id: selectedEvent.teams[i].id,
-              team2_id: selectedEvent.teams[j].id,
-              status: "pending",
-              team1_result: [0, 0, 0],
-              team2_result: [0, 0, 0],
-              flight_id: idIncrement % 3,
-              finish_time: 0
-            });
-            idIncrement++;
+      const NUM_RACES = 92
+      const RACE_INTERVAL = 15;
+      let i = 0;
+
+      let raceNum = 0;
+
+      function record_match(team1, team2, races) {
+        if (team1.id === team2.id) {
+          return false;
+        }
+        const raceExists = races.some(race =>
+          race.team1_id === team1.id && race.team2_id === team2.id
+        );
+        // In JS, arrays use .includes() instead of Python's 'in'
+        if (raceExists === true) {
+          return false;
+        }
+        if (team_matches_played[team1.id] > rounds_played || (team_match_intervals[team1.id] !== -1 && team_match_intervals[team1.id] < RACE_INTERVAL)) {
+          return false;
+        }
+        if (team_matches_played[team2.id] > rounds_played || (team_match_intervals[team2.id] !== -1 && team_match_intervals[team2.id] < RACE_INTERVAL)) {
+          return false;
+        }
+        // Sort and join to make a unique string matchup key
+        let matchupId = team1.id < team2.id
+          ? team1.id.toString() + team2.id.toString()
+          : team2.id.toString() + team1.id.toString();
+
+        // Increment matches played
+        team_matches_played[team1.id] +=1;
+        team_matches_played[team2.id] +=1;
+
+        // Reset interavl
+        team_match_intervals[team1.id] = 0;
+
+        races.push({
+          id: raceNum.toString() + matchupId,
+          racenumber: raceNum + 1,
+          team1_id: team1.id,
+          team2_id: team2.id,
+          status: "pending",
+          team1_result: [0, 0, 0],
+          team2_result: [0, 0, 0],
+          flight_id: raceNum % 3,
+          finish_time: null
+        });
+        raceNum += 1;
+        return true;
+
+      }
+
+      let attempts = 0;
+      let attempts2 = 0;
+      let prev_i = [];
+
+      while (races.length < NUM_RACES) {
+        if (attempts > 500) {
+            break;
+          }
+        attempts += 1;
+        let matchup_found = false;
+        attempts2 = 0;
+        while (matchup_found === false) {
+          if (attempts2 > 500) {
+            break;
+          }
+          attempts2 += 1;
+          do {
+          i = Math.floor(Math.random() * selectedEvent.teams.length);
+          } while (prev_i.includes(i));
+          if (prev_i.length < flights.length) {
+            matchup_found = record_match(selectedEvent.teams[Math.floor(Math.random() * selectedEvent.teams.length)], selectedEvent.teams[i], races);
+            if (matchup_found === true) {
+              break;
+            }
+          } else {
+            matchup_found = record_match(selectedEvent.teams[prev_i[0]], selectedEvent.teams[i], races);
+            if (matchup_found === true) {
+              break;
+            }
+          }
+        }
+        prev_i.push(i);
+        if (prev_i.length > flights.length) {
+          prev_i.shift();
+        }
+
+        const values = Object.values(team_matches_played);
+        const roundComplete = values.every(val => val >= rounds_played);
+        if (roundComplete) {
+          rounds_played += 2;
+        }
+                // Age the resting teams
+        for (const team of selectedEvent.teams) {
+          if (team !== selectedEvent.teams[prev_i[-1]] && team !== selectedEvent.teams[i]) {
+            if (team_match_intervals[team.id] !== -1) {
+              team_match_intervals[team.id] += 1;
+            }
           }
         }
       }
-      let teamsLastFiveRounds = [0, 0, 0, 0];
-      let hellStop = 0;
-      let lastTeam2 = 2;
-      let lastTeam1 = 1;
-      const maxIndex = 2;
-      while (races.length < 45 && hellStop < 100) {
-        let selected = false;
-        let j = 0;
-        while (!selected && j < tempRaces.length) {
-          // tries to find a race with the same team 2 but a team 1 that hasn't been on in a while
-          if (((tempRaces[j].team2_id === lastTeam2 && teamsLastFiveRounds.includes(tempRaces[j].team1_id) === false))) {
-            if (isAlreadyRace(tempRaces[j].team1_id, tempRaces[j].team2_id, races) === false) {
-              if (teamsLastFiveRounds.indexOf(tempRaces[j].team2_id) === -1) {
-                races.push(tempRaces[j]);
-                lastTeam2 = tempRaces[j].team2_id;
-                lastTeam1 = tempRaces[j].team1_id;
-                teamsLastFiveRounds = addToStack(teamsLastFiveRounds, tempRaces[j].team1_id);
-                teamsLastFiveRounds = addToStack(teamsLastFiveRounds, tempRaces[j].team2_id);
-                selected = true;
-                tempRaces.splice(j, 1);
-              } else if (teamsLastFiveRounds.indexOf(tempRaces[j].team2_id) > maxIndex) {
-                races.push(tempRaces[j]);
-                lastTeam2 = tempRaces[j].team2_id;
-                lastTeam1 = tempRaces[j].team1_id;
-                teamsLastFiveRounds = addToStack(teamsLastFiveRounds, tempRaces[j].team1_id);
-                teamsLastFiveRounds = addToStack(teamsLastFiveRounds, tempRaces[j].team2_id);
-                selected = true;
-                tempRaces.splice(j, 1);
-              }
-            }
-          }
-          // tries to find a race with the same team 1 but a team 2 that hasn't been on in a while
-          if ((tempRaces[j].team1_id === lastTeam1 && teamsLastFiveRounds.includes(tempRaces[j].team2_id) === false) && selected === false) {
-            if (isAlreadyRace(tempRaces[j].team1_id, tempRaces[j].team2_id, races) === false) {
-              if (teamsLastFiveRounds.indexOf(tempRaces[j].team1_id) === -1) {
-                races.push(tempRaces[j]);
-                lastTeam2 = tempRaces[j].team2_id;
-                lastTeam1 = tempRaces[j].team1_id;
-                teamsLastFiveRounds = addToStack(teamsLastFiveRounds, tempRaces[j].team1_id);
-                teamsLastFiveRounds = addToStack(teamsLastFiveRounds, tempRaces[j].team2_id);
-                selected = true;
-                tempRaces.splice(j, 1);
-              } else if (teamsLastFiveRounds.indexOf(tempRaces[j].team1_id) > maxIndex) {
-                races.push(tempRaces[j]);
-                lastTeam2 = tempRaces[j].team2_id;
-                lastTeam1 = tempRaces[j].team1_id;
-                teamsLastFiveRounds = addToStack(teamsLastFiveRounds, tempRaces[j].team1_id);
-                teamsLastFiveRounds = addToStack(teamsLastFiveRounds, tempRaces[j].team2_id);
-                selected = true;
-                tempRaces.splice(j, 1);
-              }
-            }
-          }
-          j++;
-        }
 
-        if (selected === false) { // if no one fits any race will do, regardless of what the last race was
-          let l = tempRaces.length - 1; // works backwards to try and give later teams a race earlier on - 
-          while (!selected && l >= 0) {
-            if (isAlreadyRace(tempRaces[l].team1_id, tempRaces[l].team2_id, races) === false) {
-              if (teamsLastFiveRounds.includes(tempRaces[l].team2_id) === false && teamsLastFiveRounds.includes(tempRaces[l].team1_id) === false) {
-                races.push(tempRaces[l]);
-                lastTeam2 = tempRaces[l].team2_id;
-                lastTeam1 = tempRaces[l].team1_id;
-                teamsLastFiveRounds = addToStack(teamsLastFiveRounds, tempRaces[l].team1_id);
-                teamsLastFiveRounds = addToStack(teamsLastFiveRounds, tempRaces[l].team2_id);
-                selected = true;
-                tempRaces.splice(l, 1);
-              }
-            }
-            l--;
-          }
-        }
-
-        if (selected === false) { // if all else fails just put any race in
-          let m = 0;
-          while (!selected && m < tempRaces.length) {
-            if (isAlreadyRace(tempRaces[m].team1_id, tempRaces[m].team2_id, races) === false) {
-              races.push(tempRaces[m]);
-              lastTeam2 = tempRaces[m].team2_id;
-              lastTeam1 = tempRaces[m].team1_id;
-              teamsLastFiveRounds = addToStack(teamsLastFiveRounds, tempRaces[m].team1_id);
-              teamsLastFiveRounds = addToStack(teamsLastFiveRounds, tempRaces[m].team2_id);
-              selected = true;
-              tempRaces.splice(m, 1);
-            }
-
-            m++;
-          }
-
-        }
-        hellStop++;
-      }
-      console.log(races);
-
-      for (let k = 0; k < races.length; k++) {
-        races[k].racenumber = k + 1;
-      }
-
-      races.sort((a, b) => a.racenumber - b.racenumber);
 
 
     } else if (scheduleType === "swiss-league") {
@@ -422,6 +420,7 @@ function App() {
         return { ...event, races: updatedRaces, status: "live" }
       })
     );
+    
   }
 
 
@@ -621,14 +620,13 @@ function App() {
 
 
   const selectedEvent = events.find(event => event.id === selectedEventId);
-
   // Generates schedule after events load
   useEffect(() => {
     if (selectedEvent.name !== "default") {
       if (((scheduleType === "swiss-league" && getNumberOfRacesCompleted() == selectedEvent.races.length)) || selectedEvent.races.length === 0) {
         generateSchedule();
       }
-      updateRaces();
+      //updateRaces();
       setLoading(false);
     }
   }, [selectedEvent]);

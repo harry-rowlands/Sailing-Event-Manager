@@ -73,12 +73,17 @@ function RaceList({ getNumberOfRacesCompleted, flights, mode, raceWinner, teams,
                 </div>
             </div>
             <ul className="race-list">
-                {races.map(race => {
-                    if (mode === "race_results" && race.status === "pending") return;
-                    if (mode === "schedule" && race.status === "completed") return;
-                    if (selectedTeam[0] !== "0") {
-                        if (race.team1_id !== Number(selectedTeam) && race.team2_id !== Number(selectedTeam)) return;
-                    }
+                {races.filter(race => {
+                        if (mode === "race_results" && race.status === "pending") return false;
+                        if (mode === "schedule" && race.status === "completed") return false;
+                        if (selectedTeam[0] !== "0") {
+                            if (race.team1_id !== Number(selectedTeam[0]) && race.team2_id !== Number(selectedTeam[0])) return false;
+                        }
+                        return true;
+                    })
+                    .map((race, index) => {
+                        const itemKey = race.id || `race-index-${index}`;
+                        const flight = flights[race.flight_id] || { team_1: "TBD", team_2: "TBD" };
                     return (< li key={race.id} className="race-card" >
                         <p className="race-title">{race.racenumber}. {getTeam1(race).name} vs {getTeam2(race).name} </p>
                         <p className="race-info">{flights[race.flight_id].team_1} vs {flights[race.flight_id].team_2}</p>
