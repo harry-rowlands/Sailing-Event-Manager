@@ -31,4 +31,30 @@ Previews the production build locally.
 
 * Can toggle *admin* mode to change between competitor's view and admin's view.
 
+# Tech Stack
+- **Frontend:** React
+- **Backend:** Supabase
+- **Language:** JavaScript
+
+# How It Works
+
+### Event Creation
+
+An administrator creates an event and adds the participating teams.
+
+### Schedule Generation
+
+When the event begins, the application generates a round-robin
+schedule using a custom scheduling algorithm.
+
+The algorithm ensures that each team:
+1. Races twice consecutively
+2. Takes a break
+3. Returns for its next pair of races
+
+### Results
+
+After each race, the administrator enters the finishing positions.
+The results are stored in Supabase and the standings are updated automatically.
+
  
